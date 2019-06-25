@@ -105,7 +105,8 @@ class _DockerDataVolumeContext:
                     return self
 
             # It doesn't exist so we need to create it
-            self._vol_ref.volume = self._lambda_func.docker_client.volumes.create(self._lambda_func.code_sha_256)
+            if self._vol_ref.volume is None:
+                self._vol_ref.volume = self._lambda_func.docker_client.volumes.create(self._lambda_func.code_sha_256)
             if docker_3:
                 volumes = {self.name: {'bind': '/tmp/data', 'mode': 'rw'}}
             else:
@@ -121,15 +122,13 @@ class _DockerDataVolumeContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         with self.__class__._lock:
-            self._vol_ref.refcount -= 1
-            if self._vol_ref.refcount == 0:
-                try:
-                    self._vol_ref.volume.remove()
-                except docker.errors.APIError as e:
-                    if e.status_code != 409:
-                        raise
+            try:
+                self._vol_ref.volume.remove()
+            except docker.errors.APIError as e:
+                if e.status_code != 409:
+                    raise
 
-                    raise  # multiple processes trying to use same volume?
+                raise  # multiple processes trying to use same volume?
 
 
 class LambdaFunction(BaseModel):
